@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: g2g-model
+  labels:
+    app: g2g-model
+spec:
+  selector:
+    app: g2g-model
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+  type: ClusterIP

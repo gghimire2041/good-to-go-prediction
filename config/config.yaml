@@ -1,0 +1,99 @@
+# G2G Model Configuration
+
+# Data Configuration
+data:
+  raw_data_path: "data/raw/g2g_dataset.csv"
+  processed_data_path: "data/processed/g2g_processed.csv"
+  train_test_split: 0.8
+  random_state: 42
+  n_samples: 5000
+
+# Feature Configuration
+features:
+  text_features:
+    - description
+  categorical_features:
+    - risk_category
+    - region
+    - business_type
+    - regulatory_status
+    - compliance_level
+  numerical_features:
+    - revenue
+    - employee_count
+    - years_in_business
+    - credit_score
+    - debt_to_equity_ratio
+    - liquidity_ratio
+    - market_share
+    - growth_rate
+    - profitability_margin
+    - customer_satisfaction
+    - operational_efficiency
+    - regulatory_violations
+    - audit_score
+  target_feature: "g2g_score"
+  id_feature: "gid"
+
+# Preprocessing Configuration
+preprocessing:
+  text:
+    vectorizer: "tfidf"
+    max_features: 1000
+    min_df: 2
+    max_df: 0.95
+    ngram_range: [1, 2]
+  numerical:
+    scaler: "standard"
+    handle_outliers: true
+    outlier_method: "iqr"
+  categorical:
+    encoding: "target"  # Let CatBoost handle this
+
+# Model Configuration
+model:
+  name: "catboost"
+  hyperparameters:
+    iterations: 1000
+    learning_rate: 0.1
+    depth: 6
+    l2_leaf_reg: 3
+    random_strength: 1
+    bagging_temperature: 1
+    border_count: 254
+    bootstrap_type: "Bayesian"
+    eval_metric: "RMSE"
+    early_stopping_rounds: 100
+    verbose: 100
+  cross_validation:
+    cv_folds: 5
+    scoring: "neg_mean_squared_error"
+
+# SHAP Configuration
+explainability:
+  shap_explainer: "tree"
+  max_display: 10
+  save_explanations: true
+  explanation_path: "data/processed/explanations"
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  title: "G2G Model API"
+  description: "Good-to-Go Model Inference API with SHAP Explanations"
+  version: "1.0.0"
+  debug: false
+
+# Logging Configuration
+logging:
+  level: "INFO"
+  log_file: "logs/g2g_model.log"
+  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
+
+# Model Persistence
+model_storage:
+  model_path: "models/g2g_model.pkl"
+  preprocessor_path: "models/preprocessor.pkl"
+  feature_names_path: "models/feature_names.pkl"
+  model_metadata_path: "models/model_metadata.json"
