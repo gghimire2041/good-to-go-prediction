@@ -68,7 +68,11 @@ def validate(model_path: Path, preprocessor_path: Path) -> None:
     if pre_features is None:
         # Derive from components
         text_names = getattr(pre, 'text_feature_names', []) or []
-        pre_features = text_names + pre.config.get('categorical_features', []) + pre.config.get('numerical_features', [])
+        pre_features = (
+            text_names
+            + pre.config.get('categorical_features', [])
+            + pre.config.get('numerical_features', [])
+        )
 
     if len(meta_features) != len(pre_features):
         errors.append(
@@ -118,4 +122,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

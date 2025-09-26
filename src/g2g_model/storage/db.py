@@ -49,7 +49,11 @@ def init_db(db_path: str | Path) -> None:
         conn.commit()
 
 
-def insert_train_cases(db_path: str | Path, cases: Iterable[Dict[str, Any]], targets: Optional[Iterable[Optional[float]]] = None) -> int:
+def insert_train_cases(
+    db_path: str | Path,
+    cases: Iterable[Dict[str, Any]],
+    targets: Optional[Iterable[Optional[float]]] = None,
+) -> int:
     ts = datetime.utcnow().isoformat()
     db_path = Path(db_path)
     with sqlite3.connect(str(db_path)) as conn:

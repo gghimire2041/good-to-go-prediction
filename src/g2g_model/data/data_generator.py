@@ -34,7 +34,10 @@ class G2GDataGenerator:
         # Define realistic categorical values
         self.risk_categories = ['Low', 'Medium', 'High', 'Critical']
         self.regions = ['North America', 'Europe', 'Asia Pacific', 'Latin America', 'Middle East', 'Africa']
-        self.business_types = ['Manufacturing', 'Technology', 'Healthcare', 'Finance', 'Retail', 'Energy', 'Telecommunications']
+        self.business_types = [
+            'Manufacturing', 'Technology', 'Healthcare', 'Finance', 'Retail', 'Energy',
+            'Telecommunications'
+        ]
         self.regulatory_statuses = ['Compliant', 'Under Review', 'Minor Issues', 'Major Issues', 'Non-Compliant']
         self.compliance_levels = ['Excellent', 'Good', 'Fair', 'Poor', 'Critical']
         
@@ -133,7 +136,13 @@ class G2GDataGenerator:
         # Compliance and risk (25% weight)
         compliance_map = {'Excellent': 1.0, 'Good': 0.8, 'Fair': 0.6, 'Poor': 0.3, 'Critical': 0.1}
         risk_map = {'Low': 1.0, 'Medium': 0.7, 'High': 0.4, 'Critical': 0.1}
-        regulatory_map = {'Compliant': 1.0, 'Under Review': 0.7, 'Minor Issues': 0.5, 'Major Issues': 0.2, 'Non-Compliant': 0.0}
+        regulatory_map = {
+            'Compliant': 1.0,
+            'Under Review': 0.7,
+            'Minor Issues': 0.5,
+            'Major Issues': 0.2,
+            'Non-Compliant': 0.0,
+        }
         
         compliance_score = (
             compliance_map[row['compliance_level']] * 0.4 +

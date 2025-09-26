@@ -24,7 +24,9 @@ def _bootstrap_lightweight_components():
     api_main.model = MiniModel()
     api_main.preprocessor = pre
     api_main.evaluator = None
-    api_main.feature_names = pre.text_feature_names + pre.config['categorical_features'] + pre.config['numerical_features']
+    api_main.feature_names = (
+        pre.text_feature_names + pre.config['categorical_features'] + pre.config['numerical_features']
+    )
 
 
 def test_health_and_predict_endpoints():

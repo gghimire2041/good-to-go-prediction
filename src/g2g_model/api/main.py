@@ -217,10 +217,12 @@ async def load_model():
                 if getattr(preprocessor, 'feature_names', None):
                     feature_names = preprocessor.feature_names  # type: ignore
                 else:
-                    text_names = getattr(preprocessor, 'text_feature_names', []) or []
-                    feature_names = text_names + \
-                        preprocessor.config.get('categorical_features', []) + \
-                        preprocessor.config.get('numerical_features', [])
+            text_names = getattr(preprocessor, 'text_feature_names', []) or []
+            feature_names = (
+                text_names
+                + preprocessor.config.get('categorical_features', [])
+                + preprocessor.config.get('numerical_features', [])
+            )
                 logger.info("Model and preprocessor loaded successfully")
             except Exception as e:
                 logger.warning(
@@ -275,7 +277,11 @@ def log_artifact_validation_summary() -> None:
             feat_pre = pre.feature_names  # type: ignore
         else:
             text_names = getattr(pre, 'text_feature_names', []) or []
-            feat_pre = text_names + pre.config.get('categorical_features', []) + pre.config.get('numerical_features', [])
+            feat_pre = (
+                text_names
+                + pre.config.get('categorical_features', [])
+                + pre.config.get('numerical_features', [])
+            )
         pre_ok = True
     except Exception as e:
         logger.warning(f"Preprocessor load failed: {e}")
@@ -291,11 +297,16 @@ def log_artifact_validation_summary() -> None:
     feat_meta_n = len(feat_meta) if isinstance(feat_meta, list) else None
     feat_pre_n = len(feat_pre) if isinstance(feat_pre, list) else None
 
+    version_str = (
+        f"versions: numpy={versions.get('numpy','?')}, "
+        f"sklearn={versions.get('sklearn','?')}, "
+        f"catboost={versions.get('catboost','?')}"
+    )
     msg = (
         f"Artifacts summary — model: {'ok' if model_ok else 'fail'}, "
         f"preprocessor: {'ok' if pre_ok else 'fail'}, "
         f"features(meta/pre): {feat_meta_n}/{feat_pre_n}, "
-        f"versions: numpy={versions.get('numpy','?')}, sklearn={versions.get('sklearn','?')}, catboost={versions.get('catboost','?')}"
+        f"{version_str}"
     )
     logger.info(msg)
 
