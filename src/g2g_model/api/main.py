@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+import json
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,6 +47,10 @@ feature_names: Optional[List[str]] = None
 async def lifespan(app: FastAPI):
     """Startup and shutdown events for the FastAPI application"""
     # Startup
+    try:
+        log_artifact_validation_summary()
+    except Exception as e:
+        logger.warning(f"Artifact validation summary failed: {e}")
     await load_model()
     yield
     # Shutdown - cleanup if needed
@@ -183,7 +188,14 @@ async def load_model():
             try:
                 model = G2GCatBoostModel.load(str(model_path))
                 preprocessor = G2GPreprocessor.load(str(preprocessor_path))
-                feature_names = preprocessor.feature_names if hasattr(preprocessor, 'feature_names') else []
+                # Compute feature names deterministically from the preprocessor
+                if getattr(preprocessor, 'feature_names', None):
+                    feature_names = preprocessor.feature_names  # type: ignore
+                else:
+                    text_names = getattr(preprocessor, 'text_feature_names', []) or []
+                    feature_names = text_names + \
+                        preprocessor.config.get('categorical_features', []) + \
+                        preprocessor.config.get('numerical_features', [])
                 logger.info("Model and preprocessor loaded successfully")
             except Exception as e:
                 logger.warning(
@@ -203,6 +215,64 @@ async def load_model():
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         raise
+
+
+def log_artifact_validation_summary() -> None:
+    """Log a concise validation summary for artifacts if present."""
+    model_path = Path("models/g2g_model.pkl")
+    preprocessor_path = Path("models/preprocessor.pkl")
+    metadata_path = model_path.with_suffix('.json')
+
+    if not (model_path.exists() and preprocessor_path.exists()):
+        logger.info("Artifacts not found; API may train a demo model on startup.")
+        return
+
+    model_ok = False
+    pre_ok = False
+    feat_meta = None
+    feat_pre = None
+    versions = {}
+
+    # Load metadata if available
+    if metadata_path.exists():
+        try:
+            with open(metadata_path, 'r') as f:
+                meta = json.load(f)
+            feat_meta = meta.get('feature_names')
+            versions = meta.get('versions', {})
+        except Exception as e:
+            logger.warning(f"Failed to read model metadata: {e}")
+
+    # Try load preprocessor and derive features
+    try:
+        pre = G2GPreprocessor.load(str(preprocessor_path))
+        if getattr(pre, 'feature_names', None):
+            feat_pre = pre.feature_names  # type: ignore
+        else:
+            text_names = getattr(pre, 'text_feature_names', []) or []
+            feat_pre = text_names + pre.config.get('categorical_features', []) + pre.config.get('numerical_features', [])
+        pre_ok = True
+    except Exception as e:
+        logger.warning(f"Preprocessor load failed: {e}")
+
+    # Try load model
+    try:
+        _ = G2GCatBoostModel.load(str(model_path))
+        model_ok = True
+    except Exception as e:
+        logger.warning(f"Model load failed: {e}")
+
+    # Compose summary
+    feat_meta_n = len(feat_meta) if isinstance(feat_meta, list) else None
+    feat_pre_n = len(feat_pre) if isinstance(feat_pre, list) else None
+
+    msg = (
+        f"Artifacts summary — model: {'ok' if model_ok else 'fail'}, "
+        f"preprocessor: {'ok' if pre_ok else 'fail'}, "
+        f"features(meta/pre): {feat_meta_n}/{feat_pre_n}, "
+        f"versions: numpy={versions.get('numpy','?')}, sklearn={versions.get('sklearn','?')}, catboost={versions.get('catboost','?')}"
+    )
+    logger.info(msg)
 
 
 async def train_demo_model():

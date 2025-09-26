@@ -407,6 +407,17 @@ class G2GPreprocessor:
         preprocessor.text_feature_names = save_data['text_feature_names']
         preprocessor.is_fitted = save_data['is_fitted']
         
+        # Derive full feature name list for downstream components
+        try:
+            preprocessor.feature_names = (
+                (preprocessor.text_feature_names or [])
+                + preprocessor.config.get('categorical_features', [])
+                + preprocessor.config.get('numerical_features', [])
+            )
+        except Exception:
+            # Fallback: leave unset; API will compute when loading
+            preprocessor.feature_names = None  # type: ignore
+        
         logger.info(f"Preprocessor loaded from {filepath}")
         
         return preprocessor

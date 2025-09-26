@@ -481,6 +481,21 @@ class G2GCatBoostModel:
         if metadata_path is None:
             metadata_path = model_path.with_suffix('.json')
         
+        # Stamp environment versions for validation
+        try:
+            import platform
+            import numpy as _np
+            import sklearn as _sk
+            import catboost as _cb
+            versions = {
+                'python': platform.python_version(),
+                'numpy': getattr(_np, '__version__', 'unknown'),
+                'sklearn': getattr(_sk, '__version__', 'unknown'),
+                'catboost': getattr(_cb, '__version__', 'unknown'),
+            }
+        except Exception:
+            versions = {}
+
         metadata = {
             'config': self.config,
             'feature_names': self.feature_names,
@@ -489,7 +504,8 @@ class G2GCatBoostModel:
             'cv_scores': self.cv_scores,
             'best_params': self.best_params,
             'model_type': 'CatBoostRegressor',
-            'random_state': self.random_state
+            'random_state': self.random_state,
+            'versions': versions,
         }
         
         with open(metadata_path, 'w') as f:

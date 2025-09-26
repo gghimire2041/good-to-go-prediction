@@ -197,21 +197,41 @@ class G2GModelEvaluator:
         else:
             expected_value = 0
         
+        # Align lengths defensively
+        names = self.feature_names or []
+        if len(names) != len(shap_values):
+            names = [f"feature_{i}" for i in range(len(shap_values))]
+
+        feature_values = X_instance[0]
+        if len(feature_values) != len(shap_values):
+            # Truncate or pad feature_values to match shap_values
+            fv = np.zeros_like(shap_values, dtype=float)
+            n = min(len(feature_values), len(shap_values))
+            fv[:n] = feature_values[:n]
+            feature_values = fv
+
         # Create feature importance dataframe
         feature_importance_df = pd.DataFrame({
-            'feature': self.feature_names,
-            'feature_value': X_instance[0],
+            'feature': names,
+            'feature_value': feature_values,
             'shap_value': shap_values,
             'abs_shap_value': np.abs(shap_values)
         }).sort_values('abs_shap_value', ascending=False)
         
+        # Select top 3 positive/negative features
+        top_pos_df = feature_importance_df[feature_importance_df['shap_value'] > 0].head(3)
+        top_neg_df = feature_importance_df[feature_importance_df['shap_value'] < 0].head(3)
+
+        # Limit contributions to these six items to reduce payload size
+        limited_contrib_df = pd.concat([top_pos_df, top_neg_df]).sort_values('abs_shap_value', ascending=False)
+
         explanation = {
             'instance_id': instance_id or 'unknown',
             'prediction': prediction,
             'expected_value': expected_value,
-            'feature_contributions': feature_importance_df.to_dict('records'),
-            'top_positive_features': feature_importance_df[feature_importance_df['shap_value'] > 0].head(5).to_dict('records'),
-            'top_negative_features': feature_importance_df[feature_importance_df['shap_value'] < 0].head(5).to_dict('records'),
+            'feature_contributions': limited_contrib_df.to_dict('records'),
+            'top_positive_features': top_pos_df.to_dict('records'),
+            'top_negative_features': top_neg_df.to_dict('records'),
             'explanation_summary': self._generate_explanation_text(feature_importance_df, prediction)
         }
         
