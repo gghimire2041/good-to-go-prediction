@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator, ConfigDict
 import uvicorn
 import numpy as np
+import pandas as pd
 
 # Add the source directory to Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
