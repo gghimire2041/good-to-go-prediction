@@ -10,12 +10,9 @@ import pandas as pd
 from typing import List, Dict, Any, Tuple, Optional, Union
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
 import joblib
 import logging
 from pathlib import Path
-import json
 
 logger = logging.getLogger(__name__)
 

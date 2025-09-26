@@ -4,22 +4,18 @@ FastAPI Application for G2G Model
 Production-ready REST API for G2G model inference with SHAP explanations.
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
-import asyncio
 from contextlib import asynccontextmanager
 import json
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator, ConfigDict
 import uvicorn
 import numpy as np
-import pandas as pd
-import joblib
 
 # Add the source directory to Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))

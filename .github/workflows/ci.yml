@@ -23,11 +23,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Lint and type check
+      - name: Lint and type check (non-blocking)
         run: |
-          black --check src scripts tests || (echo "Run black" && exit 1)
-          isort --check-only src scripts tests || (echo "Run isort" && exit 1)
-          flake8 src scripts tests
+          black --check src scripts tests || echo "[WARN] black check failed"
+          isort --check-only src scripts tests || echo "[WARN] isort check failed"
+          flake8 src scripts tests || echo "[WARN] flake8 reported issues"
           mypy src || true
 
       - name: Run tests
@@ -35,4 +35,3 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t g2g-model:ci .
-

@@ -1,5 +1,4 @@
 from fastapi.testclient import TestClient
-from typing import Any
 
 from src.g2g_model.api import main as api_main
 from src.g2g_model.preprocessing.preprocessor import G2GPreprocessor
@@ -69,4 +68,3 @@ def test_health_and_predict_endpoints():
         pred_body = pr.json()
         assert pred_body["gid"] == sample["gid"]
         assert 0.0 <= pred_body["g2g_score"] <= 1.0
-

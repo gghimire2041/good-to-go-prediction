@@ -6,7 +6,6 @@ cross-validation, and model persistence capabilities.
 """
 
 import numpy as np
-import pandas as pd
 from typing import Dict, Any, List, Tuple, Optional, Union
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score

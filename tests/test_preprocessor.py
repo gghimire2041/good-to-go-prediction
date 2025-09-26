@@ -1,4 +1,3 @@
-import pandas as pd
 import numpy as np
 
 from src.g2g_model.data.data_generator import G2GDataGenerator
@@ -31,4 +30,3 @@ def test_preprocessor_transform_consistency():
 
     assert X_test.shape[1] == X_train.shape[1]
     assert feature_names_train == feature_names_test
-

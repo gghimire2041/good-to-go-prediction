@@ -7,12 +7,9 @@ for individual predictions and global model behavior.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Tuple, Optional, Union
+from typing import Dict, Any, List, Optional
 import shap
-import matplotlib.pyplot as plt
 import logging
-from pathlib import Path
-import json
 from sklearn.metrics import (
     mean_squared_error, mean_absolute_error, r2_score, 
     explained_variance_score, max_error
