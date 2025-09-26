@@ -217,12 +217,12 @@ async def load_model():
                 if getattr(preprocessor, 'feature_names', None):
                     feature_names = preprocessor.feature_names  # type: ignore
                 else:
-            text_names = getattr(preprocessor, 'text_feature_names', []) or []
-            feature_names = (
-                text_names
-                + preprocessor.config.get('categorical_features', [])
-                + preprocessor.config.get('numerical_features', [])
-            )
+                    text_names = getattr(preprocessor, 'text_feature_names', []) or []
+                    feature_names = (
+                        text_names
+                        + preprocessor.config.get('categorical_features', [])
+                        + preprocessor.config.get('numerical_features', [])
+                    )
                 logger.info("Model and preprocessor loaded successfully")
             except Exception as e:
                 logger.warning(
