@@ -4,7 +4,8 @@ FastAPI Application for G2G Model
 Production-ready REST API for G2G model inference with SHAP explanations.
 """
 
-import sys
+ import sys
+ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
@@ -12,11 +13,13 @@ from contextlib import asynccontextmanager
 import json
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator, ConfigDict
 import uvicorn
 import numpy as np
 import pandas as pd
+import time
 
 # Add the source directory to Python path
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -32,6 +35,21 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Prometheus metrics
+try:
+    from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+
+    PREDICT_COUNT = Counter("g2g_predict_requests_total", "Total predict requests")
+    EXPLAIN_COUNT = Counter("g2g_explain_requests_total", "Total explain requests")
+    BATCH_COUNT = Counter("g2g_batch_requests_total", "Total batch requests")
+    PREDICT_LAT = Histogram("g2g_predict_latency_seconds", "Predict latency seconds")
+    EXPLAIN_LAT = Histogram("g2g_explain_latency_seconds", "Explain latency seconds")
+    BATCH_LAT = Histogram("g2g_batch_latency_seconds", "Batch predict latency seconds")
+except Exception:
+    # Metrics optional
+    PREDICT_COUNT = EXPLAIN_COUNT = BATCH_COUNT = None
+    PREDICT_LAT = EXPLAIN_LAT = BATCH_LAT = None
 
 # Global variables to store model and preprocessor
 model: Optional[G2GCatBoostModel] = None
@@ -149,6 +167,16 @@ class BatchPredictionResponse(BaseModel):
     explanations: Optional[List[G2GExplanation]] = None
     total_cases: int
     processing_time_seconds: float
+
+
+# Admin models (optional endpoints)
+class AdminInferenceRow(BaseModel):
+    gid: Optional[str] = None
+    prediction: Optional[float] = None
+    confidence: Optional[str] = None
+    explanation_summary: Optional[str] = None
+    created_at: str
+    payload: Optional[Dict[str, Any]] = None
 
 
 # FastAPI app initialization
@@ -272,6 +300,53 @@ def log_artifact_validation_summary() -> None:
     logger.info(msg)
 
 
+def _admin_enabled() -> bool:
+    return os.getenv("ADMIN_ENDPOINTS", "0").lower() in {"1", "true", "yes"}
+
+
+@app.get("/admin/recent_inferences", response_model=List[AdminInferenceRow])
+async def recent_inferences(limit: int = 50):
+    if not _admin_enabled():
+        raise HTTPException(status_code=403, detail="Admin endpoints disabled")
+    try:
+        import sqlite3
+        db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT gid, payload_json, prediction, confidence, explanation_summary, created_at
+            FROM inference_logs
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(limit),),
+        )
+        rows = cur.fetchall()
+        conn.close()
+        out: List[AdminInferenceRow] = []
+        for gid, payload_json, pred, conf, expl, created_at in rows:
+            payload = None
+            try:
+                payload = json.loads(payload_json) if payload_json else None
+            except Exception:
+                payload = None
+            out.append(
+                AdminInferenceRow(
+                    gid=gid,
+                    prediction=pred if pred is not None else None,
+                    confidence=conf,
+                    explanation_summary=expl,
+                    created_at=created_at,
+                    payload=payload,
+                )
+            )
+        return out
+    except Exception as e:
+        logger.error(f"recent_inferences error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch recent inferences")
+
+
 async def train_demo_model():
     """Train a demo model if no saved model exists"""
     global model, preprocessor, feature_names
@@ -353,6 +428,14 @@ async def root():
     }
 
 
+@app.get("/metrics")
+async def metrics():
+    try:
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Metrics unavailable: {e}")
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
@@ -375,6 +458,9 @@ async def predict(g2g_input: G2GInput):
         raise HTTPException(status_code=503, detail="Model not loaded")
     
     try:
+        if PREDICT_COUNT:
+            PREDICT_COUNT.inc()
+        start = time.perf_counter()
         # Convert input to DataFrame
         df = convert_input_to_dataframe(g2g_input)
         
@@ -393,7 +479,16 @@ async def predict(g2g_input: G2GInput):
             confidence = "Low"
         
         import datetime
-        
+        # Optional: log to local DB
+        try:
+            from g2g_model.storage import db as g2gdb
+            db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
+            g2gdb.init_db(db_path)
+            g2gdb.log_inference(db_path, gid=g2g_input.gid, payload=df.to_dict(orient="records")[0], prediction=float(prediction), confidence=confidence, explanation_summary=None)
+        except Exception:
+            pass
+        if PREDICT_LAT:
+            PREDICT_LAT.observe(time.perf_counter() - start)
         return G2GPrediction(
             gid=g2g_input.gid or "api_request",
             g2g_score=round(float(prediction), 4),
@@ -416,6 +511,9 @@ async def explain_prediction(g2g_input: G2GInput):
         raise HTTPException(status_code=503, detail="Model or explainer not loaded")
     
     try:
+        if EXPLAIN_COUNT:
+            EXPLAIN_COUNT.inc()
+        start = time.perf_counter()
         # Convert input to DataFrame
         df = convert_input_to_dataframe(g2g_input)
         
@@ -431,7 +529,7 @@ async def explain_prediction(g2g_input: G2GInput):
         # Get explanation
         explanation = evaluator.explain_prediction(X[0], g2g_input.gid or "api_request")
         
-        return G2GExplanation(
+        result = G2GExplanation(
             gid=explanation['instance_id'],
             g2g_score=round(float(explanation['prediction']), 4),
             explanation_summary=explanation['explanation_summary'],
@@ -439,6 +537,17 @@ async def explain_prediction(g2g_input: G2GInput):
             top_negative_features=explanation['top_negative_features'],
             feature_contributions=explanation['feature_contributions']
         )
+        # Optional: log to local DB
+        try:
+            from g2g_model.storage import db as g2gdb
+            db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
+            g2gdb.init_db(db_path)
+            g2gdb.log_inference(db_path, gid=g2g_input.gid, payload=df.to_dict(orient="records")[0], prediction=float(explanation['prediction']), confidence=None, explanation_summary=explanation['explanation_summary'])
+        except Exception:
+            pass
+        if EXPLAIN_LAT:
+            EXPLAIN_LAT.observe(time.perf_counter() - start)
+        return result
         
     except Exception as e:
         logger.error(f"Explanation error: {e}")
@@ -457,6 +566,9 @@ async def batch_predict(request: BatchPredictionRequest):
     start_time = time.time()
     
     try:
+        if BATCH_COUNT:
+            BATCH_COUNT.inc()
+        start = time.perf_counter()
         predictions = []
         explanations = [] if request.include_explanations else None
         
@@ -497,6 +609,8 @@ async def batch_predict(request: BatchPredictionRequest):
                     logger.warning(f"Failed to generate explanation for case: {e}")
         
         processing_time = time.time() - start_time
+        if BATCH_LAT:
+            BATCH_LAT.observe(time.perf_counter() - start)
         
         return BatchPredictionResponse(
             predictions=predictions,

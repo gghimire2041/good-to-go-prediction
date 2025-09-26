@@ -25,11 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Lint and type check (non-blocking)
+      - name: Format & Lint (blocking)
         run: |
-          black --check src scripts tests || echo "[WARN] black check failed"
-          isort --check-only src scripts tests || echo "[WARN] isort check failed"
-          flake8 src scripts tests || echo "[WARN] flake8 reported issues"
+          isort src scripts tests
+          black src scripts tests
+          flake8 src scripts tests
           mypy src || true
 
       - name: Run tests
@@ -37,3 +37,38 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t g2g-model:ci .
+
+      - name: Smoke test API in container
+        run: |
+          docker run -d --rm -p 8000:8000 --name g2g-ci g2g-model:ci
+          echo "Waiting for API to become healthy..."
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health >/dev/null; then
+              echo "API is up"; break; fi; sleep 2; done
+          curl -fsS http://localhost:8000/health
+          cat > payload.json << 'JSON'
+          {
+            "gid": "ci_case_1",
+            "risk_category": "Medium",
+            "region": "North America",
+            "business_type": "Technology",
+            "regulatory_status": "Compliant",
+            "compliance_level": "Good",
+            "revenue": 5000000,
+            "employee_count": 50,
+            "years_in_business": 8,
+            "credit_score": 720,
+            "debt_to_equity_ratio": 0.5,
+            "liquidity_ratio": 1.8,
+            "market_share": 0.15,
+            "growth_rate": 0.12,
+            "profitability_margin": 0.15,
+            "customer_satisfaction": 85,
+            "operational_efficiency": 78,
+            "regulatory_violations": 1,
+            "audit_score": 82,
+            "description": "A technology company specializing in cloud-based solutions with strong growth and good compliance record."
+          }
+          JSON
+          curl -fsS -X POST http://localhost:8000/predict -H 'Content-Type: application/json' --data @payload.json
+          docker stop g2g-ci

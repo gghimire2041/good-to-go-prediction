@@ -18,16 +18,39 @@ from g2g_model.data.data_generator import G2GDataGenerator
 from g2g_model.preprocessing.preprocessor import G2GPreprocessor
 from g2g_model.models.catboost_model import G2GCatBoostModel
 from g2g_model.evaluation.evaluator import G2GModelEvaluator
+import os
+import mlflow
+import mlflow.sklearn
+from g2g_model.storage import db as g2gdb
 
 
 def main():
     print("=== G2G Model Training and Saving Script ===")
     
-    # Generate synthetic data
-    print("\n1. Generating synthetic data...")
-    generator = G2GDataGenerator(random_state=42)
-    df = generator.generate_data(n_samples=5000)
-    print(f"Generated {len(df)} samples with {len(df.columns)} features")
+    # Option A: load training data from local DB if enabled and present
+    use_db = os.getenv("USE_DB_TRAIN", "0").lower() in {"1", "true", "yes"}
+    db_path = os.getenv("G2G_DB_PATH", str(project_root / "data" / "g2g.db"))
+    if use_db and Path(db_path).exists():
+        print("\n1. Loading training data from local DB...")
+        g2gdb.init_db(db_path)
+        df = g2gdb.fetch_training_dataframe(db_path)
+        if df.empty:
+            print("Local DB is empty; falling back to synthetic generation.")
+            use_db = False
+        else:
+            print(f"Loaded {len(df)} training rows from DB")
+    if not use_db:
+        # Generate synthetic data
+        print("\n1. Generating synthetic data...")
+        generator = G2GDataGenerator(random_state=42)
+        df = generator.generate_data(n_samples=5000)
+        print(f"Generated {len(df)} samples with {len(df.columns)} features")
+        # Persist to DB for future training reuse
+        g2gdb.init_db(db_path)
+        cases = df.drop(columns=["g2g_score"]).to_dict(orient="records")
+        targets = df["g2g_score"].tolist()
+        inserted = g2gdb.insert_train_cases(db_path, cases, targets)
+        print(f"Saved {inserted} rows to {db_path}")
     
     # Preprocess data
     print("\n2. Preprocessing data...")
@@ -42,6 +65,11 @@ def main():
         X, y, test_size=0.2, random_state=42
     )
     
+    # Configure MLflow local tracking
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", str(project_root / "mlruns"))
+    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_experiment(os.getenv("MLFLOW_EXPERIMENT_NAME", "g2g-training"))
+
     # Train model
     print("\n3. Training CatBoost model...")
     config = {
@@ -59,8 +87,17 @@ def main():
         }
     }
     
-    model = G2GCatBoostModel(config=config)
-    model.fit(X_train, y_train, feature_names, X_test, y_test)
+    with mlflow.start_run(run_name="train_catboost"):
+        model = G2GCatBoostModel(config=config)
+        model.fit(X_train, y_train, feature_names, X_test, y_test)
+        # Log params and metrics
+        for k, v in config['hyperparameters'].items():
+            mlflow.log_param(f"catboost_{k}", v)
+        eval_metrics = model.evaluate(X_test, y_test)
+        for k, v in eval_metrics.items():
+            mlflow.log_metric(k, float(v))
+        # Log feature count
+        mlflow.log_param("n_features", len(feature_names))
     
     # Evaluate model
     print("\n4. Evaluating model...")
@@ -91,6 +128,9 @@ def main():
     
     # Save preprocessor
     preprocessor.save(str(preprocessor_path))
+    # Log artifacts to MLflow
+    mlflow.log_artifact(str(model_path))
+    mlflow.log_artifact(str(preprocessor_path))
     
     print(f"Model saved to: {model_path}")
     print(f"Preprocessor saved to: {preprocessor_path}")

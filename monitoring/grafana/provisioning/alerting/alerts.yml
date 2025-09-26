@@ -1,0 +1,55 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: g2g-alerts
+    folder: G2G
+    interval: 1m
+    rules:
+      - uid: g2g-predict-latency
+        title: High Predict Latency (p95 > 0.5s)
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: histogram_quantile(0.95, sum(rate(g2g_predict_latency_seconds_bucket[5m])) by (le))
+              instant: true
+              legendFormat: p95
+              range: false
+              refId: A
+              datasource:
+                type: prometheus
+                uid: prometheus
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              expression: 0.5
+              refId: B
+              type: math
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A - B
+              refId: C
+              type: math
+        noDataState: NoData
+        execErrState: Error
+        for: 5m

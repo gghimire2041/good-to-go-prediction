@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'G2G Dashboards'
+    orgId: 1
+    folder: 'G2G'
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+    updateIntervalSeconds: 30
+    allowUiUpdates: true

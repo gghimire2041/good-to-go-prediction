@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G2G Monitoring & Inference</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>G2G Monitoring & Inference</h1>
+    <p>View drift reports and run online predictions against your API.</p>
+  </header>
+
+  <section class="controls">
+    <label>API Base URL
+      <input id="apiBase" type="text" value="http://localhost:8000" />
+    </label>
+    <label>Auth Token (optional)
+      <input id="authToken" type="text" placeholder="Bearer token or API key" />
+    </label>
+    <button id="checkHealth">Check Health</button>
+    <span id="healthStatus"></span>
+  </section>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Online Inference</h2>
+      <div class="form">
+        <label>gid <input id="gid" type="text" placeholder="optional" /></label>
+
+        <label>risk_category
+          <select id="risk_category">
+            <option>Low</option>
+            <option selected>Medium</option>
+            <option>High</option>
+            <option>Critical</option>
+          </select>
+        </label>
+
+        <label>region <input id="region" type="text" value="North America" /></label>
+        <label>business_type <input id="business_type" type="text" value="Technology" /></label>
+        <label>regulatory_status
+          <select id="regulatory_status">
+            <option selected>Compliant</option>
+            <option>Under Review</option>
+            <option>Minor Issues</option>
+            <option>Major Issues</option>
+            <option>Non-Compliant</option>
+          </select>
+        </label>
+        <label>compliance_level
+          <select id="compliance_level">
+            <option>Excellent</option>
+            <option selected>Good</option>
+            <option>Fair</option>
+            <option>Poor</option>
+            <option>Critical</option>
+          </select>
+        </label>
+
+        <label>revenue <input id="revenue" type="number" value="5000000" /></label>
+        <label>employee_count <input id="employee_count" type="number" value="50" /></label>
+        <label>years_in_business <input id="years_in_business" type="number" value="8" /></label>
+        <label>credit_score <input id="credit_score" type="number" value="720" /></label>
+        <label>debt_to_equity_ratio <input id="debt_to_equity_ratio" type="number" step="0.01" value="0.5" /></label>
+        <label>liquidity_ratio <input id="liquidity_ratio" type="number" step="0.01" value="1.8" /></label>
+        <label>market_share <input id="market_share" type="number" step="0.01" value="0.15" /></label>
+        <label>growth_rate <input id="growth_rate" type="number" step="0.01" value="0.12" /></label>
+        <label>profitability_margin <input id="profitability_margin" type="number" step="0.01" value="0.15" /></label>
+        <label>customer_satisfaction <input id="customer_satisfaction" type="number" step="0.1" value="85" /></label>
+        <label>operational_efficiency <input id="operational_efficiency" type="number" step="0.1" value="78" /></label>
+        <label>regulatory_violations <input id="regulatory_violations" type="number" value="1" /></label>
+        <label>audit_score <input id="audit_score" type="number" step="0.1" value="82" /></label>
+        <label>description
+          <textarea id="description">A technology company specializing in cloud-based solutions with strong growth and good compliance record.</textarea>
+        </label>
+
+        <div class="actions">
+          <button id="btnPredict">Predict</button>
+          <button id="btnExplain">Predict + Explain</button>
+        </div>
+      </div>
+      <pre id="result" class="result"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Latest Drift Report</h2>
+      <p>If available, the most recent Evidently report is embedded below.</p>
+      <iframe id="reportFrame" src="report.html" title="Drift Report" class="report"></iframe>
+    </section>
+  </main>
+
+  <footer>
+    <small>Note: The API must be reachable from this page (CORS allowed). Default base URL is http://localhost:8000.</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

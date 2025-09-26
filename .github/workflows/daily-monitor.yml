@@ -1,0 +1,89 @@
+name: Daily Drift Monitor
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # daily at 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      DAILY_SAMPLES: 5
+      COMPRESS_REPORT: 1
+      RETAIN_DAYS: 14
+      G2G_DB_PATH: data/g2g.db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run daily batch monitor
+        run: |
+          python scripts/daily_batch_monitor.py || echo "monitor-exit:$?" >> monitor_status.txt
+
+      - name: Archive monitoring artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monitoring-${{ github.run_id }}
+          path: |
+            data/monitoring/**
+            monitor_status.txt
+
+      - name: Send email on success or failure
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: >-
+            [G2G Monitor] ${{ job.status }} — run ${{ github.run_number }}
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: G2G Monitor <no-reply@g2g>
+          content_type: text/html
+          body: >-
+            <p>Daily monitor finished with status: <b>${{ job.status }}</b></p>
+            <p>Artifacts: monitoring reports and batch predictions are attached.</p>
+            <p>Repository: ${{ github.repository }}</p>
+            <p>Run: <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">${{ github.run_id }}</a></p>
+
+      - name: Build Pages site from latest report
+        if: always()
+        run: |
+          mkdir -p site
+          LATEST=$(ls -1dt data/monitoring/*/ 2>/dev/null | head -n1 || echo "")
+          if [ -n "$LATEST" ] && [ -f "${LATEST}/data_drift_report.html" ]; then
+            cp "${LATEST}/data_drift_report.html" site/report.html
+            cp "${LATEST}/data_drift_summary.json" site/data_drift_summary.json || true
+          else
+            echo "<html><body><h1>No report available</h1></body></html>" > site/report.html
+          fi
+          cp -r pages/* site/
+
+      - name: Upload GitHub Pages artifact
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        if: always()
+        uses: actions/deploy-pages@v4

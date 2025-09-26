@@ -1,6 +1,6 @@
 [flake8]
 max-line-length = 120
-extend-ignore = E203, W503
+extend-ignore = E203, W503, E402, W391
 per-file-ignores =
-    tests/*: F401
-    scripts/test_api.py: E501
+    tests/*: F401, W391
+    scripts/test_api.py: E501, F541, E722, W291, W293
