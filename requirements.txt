@@ -13,6 +13,7 @@ shap==0.43.0
 # API Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+httpx==0.24.1
 pydantic==2.5.0
 
 # Configuration Management
