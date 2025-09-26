@@ -9,7 +9,7 @@ G2G scores.
 import pandas as pd
 import numpy as np
 import uuid
-from typing import Tuple, List, Dict, Any
+from typing import Dict, Any
 from pathlib import Path
 import logging
 
@@ -63,7 +63,7 @@ class G2GDataGenerator:
         Returns:
             Generated text description
         """
-        template = np.random.choice(self.description_templates)
+        # template = np.random.choice(self.description_templates)
         business_type = row['business_type'].lower()
         region = row['region'].lower()
         
@@ -84,9 +84,18 @@ class G2GDataGenerator:
         
         # Create contextual description
         descriptions = [
-            f"A {business_type} company operating in {region} with {compliance_desc} regulatory compliance and {performance} financial performance.",
-            f"Leading {business_type} organization based in {region} showing {performance} growth trajectory and maintaining {compliance_desc} compliance standards.",
-            f"Established {business_type} business in {region} market with {performance} operational metrics and {compliance_desc} regulatory standing."
+            (
+                f"A {business_type} company operating in {region} with {compliance_desc} "
+                f"regulatory compliance and {performance} financial performance."
+            ),
+            (
+                f"Leading {business_type} organization based in {region} showing {performance} "
+                f"growth trajectory and maintaining {compliance_desc} compliance standards."
+            ),
+            (
+                f"Established {business_type} business in {region} market with {performance} "
+                f"operational metrics and {compliance_desc} regulatory standing."
+            ),
         ]
         
         return np.random.choice(descriptions)

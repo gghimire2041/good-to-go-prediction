@@ -7,7 +7,6 @@ This script trains the G2G model and saves it for use by the FastAPI application
 
 import sys
 from pathlib import Path
-import pandas as pd
 from sklearn.model_selection import train_test_split
 
 # Add src to Python path
@@ -138,7 +137,7 @@ def main():
     # Test loading
     print("\n7. Testing model loading...")
     loaded_model = G2GCatBoostModel.load(str(model_path))
-    loaded_preprocessor = G2GPreprocessor.load(str(preprocessor_path))
+    _ = G2GPreprocessor.load(str(preprocessor_path))
     
     # Quick test prediction
     test_sample = X_test[:1]

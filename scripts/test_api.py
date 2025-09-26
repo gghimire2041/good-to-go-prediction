@@ -5,7 +5,6 @@ API Testing Script for G2G Model
 Tests the FastAPI endpoints with sample data.
 """
 
-import json
 import requests
 import time
 from typing import Dict, Any

@@ -6,11 +6,10 @@ cross-validation, and model persistence capabilities.
 """
 
 import numpy as np
-from typing import Dict, Any, List, Tuple, Optional, Union
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
+from typing import Dict, Any, List, Optional
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from catboost import CatBoostRegressor, Pool
-import joblib
 import logging
 import json
 from pathlib import Path
@@ -560,39 +559,4 @@ class G2GCatBoostModel:
 
 
 if __name__ == "__main__":
-    # Example usage
-    from pathlib import Path
-    import sys
-    
-    # Add source path
-    current_dir = Path(__file__).parent.parent.parent
-    sys.path.append(str(current_dir))
-    
-    from preprocessing.preprocessor import G2GPreprocessor
-    
-    # Load and preprocess data
-    data_path = current_dir / "data" / "raw" / "g2g_dataset.csv"
-    
-    if data_path.exists():
-        df = pd.read_csv(data_path)
-        
-        # Preprocess data
-        preprocessor = G2GPreprocessor()
-        X, feature_names = preprocessor.fit_transform(df)
-        y = preprocessor.get_target(df)
-        
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
-        
-        # Create and train model
-        model = G2GCatBoostModel()
-        model.fit(X_train, y_train, feature_names)
-        
-        # Evaluate model
-        metrics = model.evaluate(X_test, y_test)
-        print("Model evaluation completed successfully!")
-        
-    else:
-        print("Sample data not found. Please run data generation first.")
+    print("Run training via scripts/train_and_save_model.py")

@@ -7,7 +7,7 @@ and numerical feature normalization for the G2G model.
 
 import numpy as np
 import pandas as pd
-from typing import List, Dict, Any, Tuple, Optional, Union
+from typing import List, Dict, Any, Tuple, Optional
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import joblib
@@ -464,23 +464,4 @@ def create_preprocessor_from_config(config_path: str) -> G2GPreprocessor:
 
 
 if __name__ == "__main__":
-    # Example usage
-    from pathlib import Path
-    
-    # Load sample data
-    data_path = Path(__file__).parent.parent.parent / "data" / "raw" / "g2g_dataset.csv"
-    
-    if data_path.exists():
-        df = pd.read_csv(data_path)
-        
-        # Create and fit preprocessor
-        preprocessor = G2GPreprocessor()
-        X, feature_names = preprocessor.fit_transform(df)
-        y = preprocessor.get_target(df)
-        
-        print(f"Transformed data shape: {X.shape}")
-        print(f"Target shape: {y.shape}")
-        print(f"Number of features: {len(feature_names)}")
-        print(f"Feature types: {preprocessor.get_feature_importance_mapping().keys()}")
-    else:
-        print("Sample data not found. Please run data generation first.")
+    print("Preprocessor is used via training and API components.")

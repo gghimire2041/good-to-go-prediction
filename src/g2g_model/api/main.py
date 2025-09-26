@@ -484,7 +484,14 @@ async def predict(g2g_input: G2GInput):
             from g2g_model.storage import db as g2gdb
             db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
             g2gdb.init_db(db_path)
-            g2gdb.log_inference(db_path, gid=g2g_input.gid, payload=df.to_dict(orient="records")[0], prediction=float(prediction), confidence=confidence, explanation_summary=None)
+            g2gdb.log_inference(
+                db_path,
+                gid=g2g_input.gid,
+                payload=df.to_dict(orient="records")[0],
+                prediction=float(prediction),
+                confidence=confidence,
+                explanation_summary=None,
+            )
         except Exception:
             pass
         if PREDICT_LAT:
@@ -542,7 +549,14 @@ async def explain_prediction(g2g_input: G2GInput):
             from g2g_model.storage import db as g2gdb
             db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
             g2gdb.init_db(db_path)
-            g2gdb.log_inference(db_path, gid=g2g_input.gid, payload=df.to_dict(orient="records")[0], prediction=float(explanation['prediction']), confidence=None, explanation_summary=explanation['explanation_summary'])
+            g2gdb.log_inference(
+                db_path,
+                gid=g2g_input.gid,
+                payload=df.to_dict(orient="records")[0],
+                prediction=float(explanation['prediction']),
+                confidence=None,
+                explanation_summary=explanation['explanation_summary'],
+            )
         except Exception:
             pass
         if EXPLAIN_LAT:

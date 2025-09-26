@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import closing
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import pandas as pd
 
@@ -108,4 +107,3 @@ def log_inference(
             (gid, json.dumps(payload), prediction, confidence, explanation_summary, ts),
         )
         conn.commit()
-
