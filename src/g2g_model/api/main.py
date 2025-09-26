@@ -301,7 +301,8 @@ def log_artifact_validation_summary() -> None:
 
 
 def _admin_enabled() -> bool:
-    return os.getenv("ADMIN_ENDPOINTS", "0").lower() in {"1", "true", "yes"}
+    val = os.getenv("ADMIN_ENDPOINTS", "0").lower()
+    return val in {"1", "true", "yes"}
 
 
 @app.get("/admin/recent_inferences", response_model=List[AdminInferenceRow])

@@ -7,7 +7,7 @@ cross-validation, and model persistence capabilities.
 
 import numpy as np
 from typing import Dict, Any, List, Optional
-from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from catboost import CatBoostRegressor, Pool
 import logging

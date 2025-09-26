@@ -348,4 +348,6 @@ if __name__ == "__main__":
     # Print summary
     summary = generator.get_feature_summary(data)
     print(f"Generated {summary['total_samples']} samples")
-    print(f"G2G Score - Mean: {summary['target_distribution']['mean']:.3f}, Std: {summary['target_distribution']['std']:.3f}")
+    mean = summary['target_distribution']['mean']
+    std = summary['target_distribution']['std']
+    print(f"G2G Score - Mean: {mean:.3f}, Std: {std:.3f}")
