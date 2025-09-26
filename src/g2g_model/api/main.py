@@ -4,8 +4,8 @@ FastAPI Application for G2G Model
 Production-ready REST API for G2G model inference with SHAP explanations.
 """
 
- import sys
- import os
+import sys
+import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import logging
@@ -27,7 +27,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from g2g_model.models.catboost_model import G2GCatBoostModel
 from g2g_model.preprocessing.preprocessor import G2GPreprocessor
 from g2g_model.evaluation.evaluator import G2GModelEvaluator
-from g2g_model.config import get_config
+ 
 
 # Configure logging
 logging.basicConfig(
