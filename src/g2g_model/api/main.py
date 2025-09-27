@@ -15,6 +15,7 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, validator, ConfigDict
 import uvicorn
 import numpy as np
@@ -196,6 +197,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve static UI at /ui (avoids HTTPS mixed content if API is public with TLS)
+try:
+    app.mount("/ui", StaticFiles(directory="pages", html=True), name="ui")
+except Exception:
+    # If pages/ not present (e.g., minimal deployment), ignore
+    pass
+
 
 async def load_model():
     """Load the trained model, preprocessor, and evaluator"""
@@ -317,7 +325,12 @@ def _admin_enabled() -> bool:
 
 
 @app.get("/admin/recent_inferences", response_model=List[AdminInferenceRow])
-async def recent_inferences(limit: int = 50):
+async def recent_inferences(
+    limit: int = 50,
+    gid: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+):
     if not _admin_enabled():
         raise HTTPException(status_code=403, detail="Admin endpoints disabled")
     try:
@@ -325,15 +338,28 @@ async def recent_inferences(limit: int = 50):
         db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT gid, payload_json, prediction, confidence, explanation_summary, created_at
-            FROM inference_logs
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (int(limit),),
+        # Build filters dynamically
+        where_clauses = []
+        params: List[Any] = []
+        if gid:
+            where_clauses.append("gid = ?")
+            params.append(gid)
+        if start:
+            where_clauses.append("created_at >= ?")
+            params.append(start)
+        if end:
+            where_clauses.append("created_at <= ?")
+            params.append(end)
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        sql = (
+            "SELECT gid, payload_json, prediction, confidence, explanation_summary, created_at "
+            "FROM inference_logs "
+            f"{where_sql} "
+            "ORDER BY id DESC LIMIT ?"
         )
+        params.append(int(limit))
+        cur.execute(sql, params)
         rows = cur.fetchall()
         conn.close()
         out: List[AdminInferenceRow] = []
@@ -606,6 +632,7 @@ async def batch_predict(request: BatchPredictionRequest):
             # Predict
             prediction = model.predict(X)[0]
             confidence = "High" if prediction > 0.7 else "Medium" if prediction > 0.4 else "Low"
+            expl_summary = None
             
             predictions.append(G2GPrediction(
                 gid=case.gid or f"batch_{len(predictions)}",
@@ -623,6 +650,7 @@ async def batch_predict(request: BatchPredictionRequest):
                         evaluator._initialize_shap_explainer(background_data)
                     
                     explanation = evaluator.explain_prediction(X[0], case.gid or f"batch_{len(predictions)-1}")
+                    expl_summary = explanation.get('explanation_summary')
                     explanations.append(G2GExplanation(
                         gid=explanation['instance_id'],
                         g2g_score=round(float(explanation['prediction']), 4),
@@ -633,6 +661,23 @@ async def batch_predict(request: BatchPredictionRequest):
                     ))
                 except Exception as e:
                     logger.warning(f"Failed to generate explanation for case: {e}")
+
+            # Optional: log batch case to local DB
+            try:
+                from g2g_model.storage import db as g2gdb
+                db_path = os.getenv("G2G_DB_PATH", "data/g2g.db")
+                g2gdb.init_db(db_path)
+                payload = df.to_dict(orient="records")[0]
+                g2gdb.log_inference(
+                    db_path,
+                    gid=case.gid,
+                    payload=payload,
+                    prediction=float(prediction),
+                    confidence=confidence,
+                    explanation_summary=expl_summary,
+                )
+            except Exception:
+                pass
         
         processing_time = time.time() - start_time
         if BATCH_LAT:

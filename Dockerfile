@@ -24,6 +24,9 @@ COPY models/ ./models/
 # Copy scripts
 COPY scripts/ ./scripts/
 
+# Copy static UI (for serving from API at /ui)
+COPY pages/ ./pages/
+
 # Create necessary directories
 RUN mkdir -p data/raw data/processed logs
 

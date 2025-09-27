@@ -1,6 +1,11 @@
 # G2G Model — Good‑to‑Go Scoring System
 
-Production‑grade ML system for evaluating business readiness and compliance, built on CatBoost with SHAP explainability and a FastAPI service for online and batch inference. This README guides you end‑to‑end: what every folder/file is for, why each dependency is used, how data flows through the system, how to train, test, deploy, monitor, and troubleshoot.
+Production‑grade machine‑learning system that scores business readiness/compliance with interpretability, observability, and automation built‑in. This document is a complete, single‑source guide: the why, what, and how for every folder and file, all dependencies, data flow, APIs, training, deployment, monitoring, databases, CI, and troubleshooting.
+
+Quick start navigation
+- Getting Started Cheatsheet: see the Quick Commands section → [jump to cheatsheet](#cheatsheet)
+- API Docs locally: http://localhost:8000/docs (when the API is running)
+- Full stack: run `docker compose up --build` (API + Prometheus + Grafana)
 
 ## 🚀 Quick Start
 
@@ -80,15 +85,16 @@ g2g-modelling/
 ```
 
 Why this layout (beginner‑friendly)
-- src/g2g_model/api: “the web server.” Receives JSON, validates it, calls the model.
-- src/g2g_model/preprocessing: “the kitchen.” Cleans data, vectorizes text, scales numbers.
-- src/g2g_model/models: “the chef.” Trains CatBoost and knows how to save/load it.
-- src/g2g_model/evaluation: “the food critic.” Scores the chef and explains decisions (SHAP).
-- scripts: “utilities.” Train the model, validate artifacts, test the API, and start in Docker.
-- models: “the fridge.” Where trained models/preprocessors live (mounted into the container).
-- config: “the recipe.” Single YAML for feature lists, preprocessing, and model hyperparams.
-- deploy/k8s: “the restaurant.” How to run this reliably in Kubernetes.
-- docs: Deep dives for later; README is your primary map.
+- src/g2g_model/api: the web service boundary. Validates requests, runs preprocessing/model, returns predictions and SHAP explanations. Also exposes health, metrics, and optional admin endpoints.
+- src/g2g_model/preprocessing: the feature factory. Text TF‑IDF, categorical encoders, numerical scaling/outlier capping; persisted to reuse in serving.
+- src/g2g_model/models: the modeling core. CatBoost wrapper with training, CV/tuning, prediction clamping to [0,1], model persistence, and metadata stamping.
+- src/g2g_model/evaluation: the explainer and critic. Regression metrics and SHAP explanations (global/importances and local/top‑3 reasons).
+- src/g2g_model/storage: local persistence adapters (SQLite) for training data and inference logs.
+- scripts: the toolbox. Train/evaluate/log artifacts; validate bundles; daily drift monitoring; DB exports; API smoke tests; container entrypoint.
+- models: the artifact vault. Saved model (pkl + json metadata) and preprocessor (pkl); volume‑mounted in Docker for reproducibility and rollbacks.
+- config: the recipe. YAML with consistent lists of features and preprocessing/model settings.
+- deploy/k8s: optional manifests to run in Kubernetes with probes.
+- docs: supporting notes. This README is the canonical guide.
 
 ## 🎯 Model Performance
 
@@ -146,6 +152,11 @@ Notes
 End‑to‑end data flow (simple mental model)
 - Training: data_generator → preprocessor.fit_transform → model.fit → evaluator (SHAP) → save
 - Serving: JSON → preprocessor.transform → model.predict → (optional SHAP via evaluator)
+
+Database flow (optional, local SQLite)
+- Training import: USE_DB_TRAIN=1 loads train_data table into a dataframe as the training set (or seeds synthetic then saves into DB on first run).
+- Inference logging: /predict and /explain write inputs + prediction into inference_logs (best‑effort; never blocks serving).
+- Batch: /batch_predict does not log by default (can be enabled if required).
 
 ## 🔧 FastAPI Interface
 
@@ -235,6 +246,11 @@ Schemas (inputs/outputs — plain English)
 - Output (/explain → G2GExplanation):
   - Everything in prediction plus `explanation_summary`, `top_positive_features` (3), `top_negative_features` (3)
 
+Batch payload example
+- A ready file is included at `tests/batch_payload.json` (include_explanations=true). Run locally:
+  - `curl -X POST http://localhost:8000/batch_predict -H "Content-Type: application/json" --data @tests/batch_payload.json`
+  - Or use Swagger UI and paste the file content into the body.
+
 ## 🧪 Development
 
 ### Environment Setup
@@ -304,6 +320,12 @@ docker compose up --build   # or: docker-compose up --build
 Kubernetes (optional)
 - `kubectl apply -f deploy/k8s/`
 - Manifests include readiness/liveness probes on `/health`.
+
+Environment variables (serving)
+- `VALIDATE_STRICT=true` to fail fast on invalid/missing artifacts at startup
+- `ADMIN_ENDPOINTS=true` to enable `/admin/recent_inferences`
+- `G2G_DB_PATH` to override SQLite path (default: `data/g2g.db`; in Docker `/app/data/g2g.db`)
+- `PYTHONPATH=/app/src` is set in the image for imports
 
 ### Production Considerations
 
@@ -422,6 +444,8 @@ Data Quality & Ops
 - great-expectations: Optional data validation suite if integrating with real datasets.
 - loguru: Simple, powerful structured logging.
 - prometheus-client: Export Prometheus metrics for monitoring.
+ - mlflow: Experiment tracking; logs params/metrics/artifacts during training for auditability.
+ - evidently: Data drift (and model drift if ground truth available) reporting; generates HTML/JSON reports.
 
 Dev & Tooling
 - pytest, pytest-cov: Unit tests + coverage.
@@ -567,3 +591,188 @@ deploy/k8s/
 
 docs/
 - overview.md, architecture.md, api.md, training.md, testing.md, deployment.md, operations.md.
+---
+
+## 🧱 Deep Dive — Every Folder and Key File (with Rationale)
+
+- `src/g2g_model/api/main.py`
+  - Owns the FastAPI app, request/response schemas, and lifecycle.
+  - Endpoints:
+    - `/health` (liveness/readiness), `/model/info` (metadata), `/predict`, `/explain`, `/batch_predict`.
+    - `/metrics` (Prometheus exposition) and `/admin/recent_inferences` (optional; enable via `ADMIN_ENDPOINTS`).
+  - Startup:
+    - Logs artifact validation summary (feature counts, versions), then loads model/preprocessor or trains a demo model.
+  - Observability:
+    - Exposes counters/histograms for request totals and latency for predict/explain/batch.
+  - DB logging:
+    - Writes `/predict` and `/explain` calls into SQLite (`inference_logs`) when `G2G_DB_PATH` is available.
+
+- `src/g2g_model/preprocessing/preprocessor.py`
+  - TF‑IDF for text (n‑grams, max features), LabelEncoder for categoricals, StandardScaler + IQR capping for numericals.
+  - Persists fitted components via joblib; exposes `fit`, `transform`, `fit_transform`, and `get_target`.
+  - Produces explicit `feature_names` to align with SHAP.
+
+- `src/g2g_model/models/catboost_model.py`
+  - Wraps CatBoostRegressor with configurable hyperparameters, CV/tuning, and evaluation.
+  - Saves model and a JSON metadata file with training history, CV results, feature names, and environment versions (python, numpy, sklearn, catboost).
+  - `predict` clamps outputs to [0, 1] to match the G2G score definition.
+
+- `src/g2g_model/evaluation/evaluator.py`
+  - Computes regression metrics (RMSE/MAE/R², etc.).
+  - Builds a SHAP explainer (TreeExplainer preferred) and returns concise explanations:
+    - Only top‑3 positive and top‑3 negative features with a human‑readable summary, plus a limited contribution list.
+
+- `src/g2g_model/data/data_generator.py`
+  - Generates realistic synthetic data: tabular categoricals/numericals and a contextual text description.
+  - Encodes reasonable correlations with the target to produce learnable signals.
+
+- `src/g2g_model/storage/db.py`
+  - Self‑contained SQLite adapter (no extra deps) to persist:
+    - `train_data` (JSON payload + optional target)
+    - `inference_logs` (request payload + prediction + confidence + optional explanation)
+  - Helpers to insert/fetch/export records and create tables on first use.
+
+- `scripts/train_and_save_model.py`
+  - End‑to‑end training: generate (or load DB) → preprocess → train (CatBoost) → evaluate (metrics + SHAP) → save artifacts → smoke reload test.
+  - MLflow logging: logs hyperparameters, metrics, feature count, and artifacts to `./mlruns` (or `MLFLOW_TRACKING_URI`).
+  - Seeds the SQLite DB (if empty) so future runs can `USE_DB_TRAIN=1` to train from persisted data.
+
+- `scripts/validate_artifacts.py`
+  - Validates presence and loadability of the model/preprocessor and checks feature dimensionality.
+  - Compares versions in metadata vs runtime; prints warnings for mismatches.
+  - Used by the container entrypoint and available as a manual preflight.
+
+- `scripts/daily_batch_monitor.py`
+  - Daily automation:
+    - Generates `DAILY_SAMPLES` synthetic rows (default 5), saves raw/predictions to `data/monitoring/<date>/`.
+    - Adds 5 new rows into `train_data` daily and logs their inferences in `inference_logs`.
+    - Computes Evidently data‑drift report (HTML + JSON), compresses artifacts, and cleans up according to `RETAIN_DAYS`.
+
+- `scripts/export_db.py`
+  - Exports `train_data` and `inference_logs` to CSV/Parquet for analysis/audit.
+
+- `scripts/test_api.py`
+  - Local API smoke tests (health, model info, predict, explain, batch, small perf loop).
+
+- `scripts/entrypoint.sh`
+  - Validates artifacts on container start; if `VALIDATE_STRICT=true`, fails on validation errors; otherwise logs and continues.
+  - Starts Uvicorn.
+
+- `pages/` (GitHub Pages site)
+  - `index.html`, `app.js`, `styles.css`: a static UI that embeds the latest Evidently drift report and includes a client‑side form for online inference.
+  - The UI lets you set an API base URL and optional auth token (sent as `Authorization` header) and call `/predict` or `/explain` from the browser.
+
+- `monitoring/`
+  - `prometheus.yml`: scrapes `/metrics` on the API.
+  - Grafana provisioning: preloads a Prometheus data source, a dashboard for RPS and p95 latency, and a sample alert rule (predict p95 > 0.5s).
+
+- `.github/workflows/ci.yml`
+  - CI pipeline: formats (isort/black), lints (flake8), runs mypy (non‑blocking), tests (pytest), builds Docker, and smokes `/health` + `/predict` in a container.
+
+- `.github/workflows/daily-monitor.yml`
+  - Daily job (02:00 UTC) to run the monitoring script, upload artifacts, email success/failure, and deploy the latest drift report + inference UI to GitHub Pages.
+  - Requires SMTP secrets and enabling Pages; job is attached to the `github-pages` environment.
+
+---
+
+## 🗄️ Databases, Persistence, and Artifacts
+
+- SQLite DB path: default `data/g2g.db` (override via `G2G_DB_PATH`). In Docker use a volume mount: `-v $(pwd)/data:/app/data`.
+- Creation: tables are created on first insert or via helper calls; the DB appears after you run at least one `/predict` or `/explain`, training script, or the daily monitor.
+- Tables:
+  - `train_data(gid, payload_json, target, created_at)` — training rows (optional target for synthetic data)
+  - `inference_logs(gid, payload_json, prediction, confidence, explanation_summary, created_at)` — audit of served predictions
+- Export:
+  - `python scripts/export_db.py --db data/g2g.db --out-dir exports --format both`
+- Models and preprocessor:
+  - `models/g2g_model.pkl` (CatBoost), `models/g2g_model.json` (metadata), `models/preprocessor.pkl` (pipeline)
+  - Mount into Docker for consistent serving and rollbacks.
+
+---
+
+## 📡 Monitoring, Observability, and Alerts
+
+- Prometheus metrics (API):
+  - Counters: `g2g_predict_requests_total`, `g2g_explain_requests_total`, `g2g_batch_requests_total`
+  - Histograms: `g2g_predict_latency_seconds`, `g2g_explain_latency_seconds`, `g2g_batch_latency_seconds`
+  - Endpoint: `/metrics`
+- Grafana:
+  - Preprovisioned Prometheus data source and dashboard under folder “G2G”.
+  - Sample alert: Predict p95 > 0.5s for 5 minutes.
+- Evidently drift:
+  - Daily drift report HTML + JSON saved to `data/monitoring/<date>/` and published to GitHub Pages.
+  - Customize thresholds/rules by editing the monitoring script or adding Evidently performance metrics (requires labels).
+- MLflow:
+  - Training logs to `./mlruns` by default (override via `MLFLOW_TRACKING_URI`).
+  - UI: `mlflow ui --backend-store-uri ./mlruns --port 5000`.
+
+---
+
+## ⚙️ Configuration and Environment Variables
+
+- Serving:
+  - `VALIDATE_STRICT=true` — fail on invalid/missing model artifacts at container start
+  - `ADMIN_ENDPOINTS=true` — enable `/admin/recent_inferences` (for quick inspection)
+  - `G2G_DB_PATH` — SQLite file path (default `data/g2g.db`)
+- Training:
+  - `USE_DB_TRAIN=1` — train from SQLite `train_data` (fallback to synthetic if empty)
+  - `MLFLOW_TRACKING_URI`, `MLFLOW_EXPERIMENT_NAME`
+- Monitoring:
+  - `DAILY_SAMPLES` — number of synthetic rows for daily drift (default 5)
+  - `RETAIN_DAYS` — retention for old monitoring artifacts (default 14 in CI; 30 local default)
+  - `COMPRESS_REPORT=1` — compress daily folder into tar.gz
+- GitHub Actions (email):
+  - `SMTP_SERVER`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `NOTIFY_EMAIL`
+
+---
+
+## 🧪 Testing and CI/CD
+
+- Local tests: `pytest`
+- Lint & format: `flake8`, `black`, `isort`, `mypy` (CI runs isort/black then flake8 blocking; mypy non‑blocking).
+- CI pipeline:
+  - Runs on push/PR: format, lint, type‑check, tests, Docker build, and container smoke test (`/health`, `/predict`).
+- Daily monitor:
+  - Scheduled at 02:00 UTC; uploads artifacts, emails, and deploys Pages.
+
+---
+
+## 🧯 Troubleshooting (Expanded)
+
+- No DB file in `data/`:
+  - Ensure you ran `/predict` or the training/daily script. `/batch_predict` does not log by default.
+  - In Docker, mount `-v $(pwd)/data:/app/data`. Otherwise the DB lives only inside the container.
+- Model artifacts fail to load (pickle errors or version mismatch):
+  - Use Dockerized training or recreate artifacts under the same dependency set as serving.
+  - `python scripts/train_and_save_model.py` then restart the container with `-v $(pwd)/models:/app/models`.
+- Healthcheck failing in Compose:
+  - `docker compose logs -f g2g-api` to see why. If model missing, the API auto‑trains a small demo model.
+- GitHub Pages deploy fails:
+  - Enable Pages → Source: GitHub Actions; ensure the workflow has `environment: name: github-pages`.
+  - Private repo on Free plan: Pages require public repo or upgraded plan.
+- Grafana shows no data:
+  - Ensure API is up and Prometheus is scraping `/metrics`. Visit http://localhost:9090 → Status → Targets.
+- CORS blocks browser calls to the API:
+  - By default we allow all (`allow_origins=['*']`). For stricter prod usage, list allowed origins explicitly.
+
+---
+
+## 🧭 Roadmap & Extensibility
+
+- AuthN/Z: plug in FastAPI dependencies for tokens/roles or use a reverse proxy for auth.
+- Batch DB logging: enable logging for `/batch_predict` if required by your audit policy.
+- Versioned model registry: extend MLflow + GitHub Releases for promotion and rollbacks.
+- Real reference data: swap synthetic reference in daily monitor for a curated dataset.
+
+---
+
+<a id="cheatsheet"></a>
+## 🧾 Quick Commands (Cheatsheet)
+
+- Train and save artifacts: `python scripts/train_and_save_model.py`
+- Validate artifacts: `python scripts/validate_artifacts.py`
+- Start API (local): `uvicorn src.g2g_model.api.main:app --host 0.0.0.0 --port 8000`
+- Build + run (Docker): `docker build -t g2g-model:latest . && docker run -p 8000:8000 -v "$(pwd)/models:/app/models" -v "$(pwd)/data:/app/data" g2g-model:latest`
+- Full stack (Compose): `docker compose up --build`
+- Batch inference: `curl -X POST :8000/batch_predict -H 'Content-Type: application/json' --data @tests/batch_payload.json`
+- DB export: `python scripts/export_db.py --db data/g2g.db --out-dir exports --format both`
